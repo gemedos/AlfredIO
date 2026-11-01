@@ -1,0 +1,4 @@
+# Los scripts se ejecutan en Linux: siempre LF, aunque se editen en Windows.
+* text=auto eol=lf
+*.png binary
+*.jpg binary

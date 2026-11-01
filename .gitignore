@@ -1,0 +1,13 @@
+# Secretos: nunca en git (ver CLAUDE.md, sección 7)
+.env
+*.env
+!*.env.example
+secrets/
+*.pass
+*.key
+*.pem
+
+# Artefactos locales
+*.tar.gz
+.DS_Store
+Thumbs.db
