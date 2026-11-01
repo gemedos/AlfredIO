@@ -1,0 +1,12 @@
+# Instalado por infra/m80q/30-ssh-firewall.sh.
+# SSH sólo escucha por Tailscale, así que esto es una segunda barrera.
+[DEFAULT]
+backend = systemd
+bantime = 1h
+bantime.increment = true
+findtime = 10m
+maxretry = 5
+ignoreip = 127.0.0.1/8 ::1
+
+[sshd]
+enabled = true
