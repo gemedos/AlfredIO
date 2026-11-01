@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# Vigila la temperatura de la CPU (la lanza alfred-temp-watch.timer cada minuto).
+#   - Aviso por Telegram a partir de TEMP_WARN_C (como mucho uno cada 30 min) y otro al normalizarse.
+#   - Si pasa de TEMP_CRIT_C durante TEMP_CRIT_MINUTES minutos seguidos: aviso y apagado ordenado.
+# Simulación (prueba de aceptación; envía avisos reales marcados y NUNCA apaga):
+#   sudo alfred-temp-watch --simulate 96              # aviso de temperatura alta
+#   sudo alfred-temp-watch --simulate 96 --sustained  # además, el camino de apagado
+# Variables para pruebas: ALFRED_ETC, ALFRED_STATE_DIR, ALFRED_HWMON_ROOT, ALFRED_NOTIFY, ALFRED_POWEROFF.
+set -euo pipefail
+export LC_ALL=C
+
+ALFRED_ETC="${ALFRED_ETC:-/etc/alfred}"
+STATE_DIR="${ALFRED_STATE_DIR:-/var/lib/alfred}"
+HWMON_ROOT="${ALFRED_HWMON_ROOT:-/sys/class/hwmon}"
+NOTIFY="${ALFRED_NOTIFY:-/usr/local/sbin/alfred-notify}"
+POWEROFF="${ALFRED_POWEROFF:-systemctl poweroff}"
+REWARN_SECONDS=1800
+# shellcheck disable=SC1091
+. "$ALFRED_ETC/m80q.env"
+
+simulate="" sustained=0
+while (($#)); do
+    case "$1" in
+        --simulate) simulate="${2:?falta la temperatura}"; shift 2 ;;
+        --sustained) sustained=1; shift ;;
+        *) echo "Opción desconocida: $1" >&2; exit 2 ;;
+    esac
+done
+
+# Temperatura del paquete de la CPU en °C (entero), leída del driver coretemp.
+read_temp() {
+    local d f label
+    for d in "$HWMON_ROOT"/hwmon*; do
+        [[ "$(cat "$d/name" 2>/dev/null)" == "coretemp" ]] || continue
+        for f in "$d"/temp*_label; do
+            label=$(cat "$f")
+            if [[ "$label" == "Package id 0" ]]; then
+                echo $(( $(cat "${f%_label}_input") / 1000 ))
+                return 0
+            fi
+        done
+    done
+    return 1
+}
+
+prefix=""
+if [[ -n "$simulate" ]]; then
+    [[ "$simulate" =~ ^[0-9]+$ ]] || { echo "--simulate necesita un número entero" >&2; exit 2; }
+    STATE_DIR=$(mktemp -d)
+    trap 'rm -rf "$STATE_DIR"' EXIT
+    prefix="[SIMULACIÓN] "
+fi
+state="$STATE_DIR/temp-state"
+
+CRIT_COUNT=0 WARNED=0 LAST_WARN=0 READ_FAIL=0
+# shellcheck disable=SC1090
+[[ -r "$state" ]] && . "$state"
+if [[ -n "$simulate" && $sustained -eq 1 ]]; then CRIT_COUNT=$((TEMP_CRIT_MINUTES - 1)); fi
+
+save_state() {
+    printf 'CRIT_COUNT=%d\nWARNED=%d\nLAST_WARN=%d\nREAD_FAIL=%d\n' \
+        "$CRIT_COUNT" "$WARNED" "$LAST_WARN" "$READ_FAIL" >"$state.tmp"
+    mv "$state.tmp" "$state"
+}
+
+if [[ -n "$simulate" ]]; then
+    t="$simulate"
+elif ! t=$(read_temp); then
+    if ((READ_FAIL == 0)); then
+        $NOTIFY "No puedo leer la temperatura de la CPU (coretemp). La vigilancia de temperatura NO funciona." || true
+    fi
+    READ_FAIL=1
+    save_state
+    exit 1
+fi
+READ_FAIL=0
+
+if ((t >= TEMP_CRIT_C)); then CRIT_COUNT=$((CRIT_COUNT + 1)); else CRIT_COUNT=0; fi
+
+if ((CRIT_COUNT >= TEMP_CRIT_MINUTES)); then
+    $NOTIFY "${prefix}CRÍTICO: CPU a ${t} °C durante ${CRIT_COUNT} min (límite ${TEMP_CRIT_C} °C). Apagado ordenado del M80q." || true
+    save_state
+    if [[ -n "$simulate" ]]; then
+        $NOTIFY "${prefix}Es una simulación: el equipo NO se apaga." || true
+    else
+        $POWEROFF
+    fi
+    exit 0
+fi
+
+now=$(date +%s)
+if ((t >= TEMP_WARN_C)); then
+    if ((now - LAST_WARN >= REWARN_SECONDS)); then
+        $NOTIFY "${prefix}Temperatura alta: CPU a ${t} °C (aviso desde ${TEMP_WARN_C} °C; apagado si pasa de ${TEMP_CRIT_C} °C durante ${TEMP_CRIT_MINUTES} min)." || true
+        LAST_WARN=$now
+    fi
+    WARNED=1
+elif ((WARNED == 1 && t <= TEMP_WARN_C - 10)); then
+    $NOTIFY "${prefix}Temperatura normal de nuevo: CPU a ${t} °C." || true
+    WARNED=0
+fi
+save_state
+echo "CPU ${t} °C"

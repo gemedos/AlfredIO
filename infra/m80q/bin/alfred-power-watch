@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# Vigila el consumo del M80q con el Shelly Plug M Gen3 (la lanza alfred-power-watch.timer cada minuto).
+#   - El CORTE lo hace el propio Shelly con su límite de potencia interno (funciona aunque el M80q se cuelgue).
+#   - Este script avisa por Telegram de consumo alto sostenido y de que no puede leer el enchufe.
+#   - Cada lectura queda en el journal: journalctl -t alfred-power --since -7d  (para calibrar umbrales).
+#   alfred-power-watch --read    # muestra el consumo actual y sale
+# Variables para pruebas: ALFRED_ETC, ALFRED_STATE_DIR, ALFRED_NOTIFY, ALFRED_SHELLY_JSON (archivo en vez de red).
+set -euo pipefail
+export LC_ALL=C
+
+ALFRED_ETC="${ALFRED_ETC:-/etc/alfred}"
+STATE_DIR="${ALFRED_STATE_DIR:-/var/lib/alfred}"
+NOTIFY="${ALFRED_NOTIFY:-/usr/local/sbin/alfred-notify}"
+REWARN_SECONDS=1800
+FAILS_BEFORE_ALERT=5
+# shellcheck disable=SC1091
+. "$ALFRED_ETC/m80q.env"
+SHELLY_PASSWORD=""
+# shellcheck disable=SC1091
+[[ -r "$ALFRED_ETC/secrets.env" ]] && . "$ALFRED_ETC/secrets.env"
+
+[[ -n "${SHELLY_HOST:-}" ]] || { echo "SHELLY_HOST vacío: vigilancia de consumo desactivada."; exit 0; }
+
+fetch_status() {
+    if [[ -n "${ALFRED_SHELLY_JSON:-}" ]]; then
+        cat "$ALFRED_SHELLY_JSON"
+        return
+    fi
+    # La contraseña va por stdin (-K -), no en la línea de comandos.
+    printf 'url = "http://%s/rpc/Switch.GetStatus?id=0"\nuser = "%s:%s"\n' \
+        "$SHELLY_HOST" "$SHELLY_USER" "$SHELLY_PASSWORD" \
+        | curl -fsS --max-time 5 --digest -K -
+}
+
+# Potencia en W (entero) a partir del JSON del Shelly; falla si no es un número.
+parse_watts() {
+    local w
+    w=$(jq -er '.apower | numbers') || return 1
+    printf '%.0f\n' "$w"
+}
+
+if [[ "${1:-}" == "--read" ]]; then
+    fetch_status | parse_watts | sed 's/$/ W/'
+    exit 0
+fi
+
+state="$STATE_DIR/power-state"
+HIGH_COUNT=0 LAST_WARN=0 FAILS=0
+# shellcheck disable=SC1090
+[[ -r "$state" ]] && . "$state"
+save_state() {
+    printf 'HIGH_COUNT=%d\nLAST_WARN=%d\nFAILS=%d\n' "$HIGH_COUNT" "$LAST_WARN" "$FAILS" >"$state.tmp"
+    mv "$state.tmp" "$state"
+}
+
+if ! w=$(fetch_status | parse_watts); then
+    FAILS=$((FAILS + 1))
+    if ((FAILS == FAILS_BEFORE_ALERT)); then
+        $NOTIFY "No puedo leer el enchufe Shelly ($SHELLY_HOST) desde hace ${FAILS} min. La vigilancia de consumo NO funciona." || true
+    fi
+    save_state
+    exit 1
+fi
+if ((FAILS >= FAILS_BEFORE_ALERT)); then
+    $NOTIFY "Vuelvo a leer el enchufe Shelly: ${w} W." || true
+fi
+FAILS=0
+logger -t alfred-power -- "${w} W" 2>/dev/null || true
+
+if ((w >= POWER_WARN_W)); then HIGH_COUNT=$((HIGH_COUNT + 1)); else HIGH_COUNT=0; fi
+now=$(date +%s)
+if ((HIGH_COUNT >= POWER_WARN_MINUTES && now - LAST_WARN >= REWARN_SECONDS)); then
+    $NOTIFY "Consumo anómalo: ${w} W durante ${HIGH_COUNT} min (umbral ${POWER_WARN_W} W). Si sigue subiendo, el Shelly cortará solo con su límite interno." || true
+    LAST_WARN=$now
+fi
+save_state
+echo "${w} W"

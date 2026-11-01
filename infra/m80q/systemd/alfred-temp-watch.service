@@ -1,0 +1,9 @@
+[Unit]
+Description=Alfred: vigilancia de temperatura de la CPU
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/alfred-temp-watch
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
