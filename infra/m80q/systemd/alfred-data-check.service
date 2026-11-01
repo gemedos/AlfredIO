@@ -1,0 +1,8 @@
+[Unit]
+Description=Alfred: aviso si la particion de datos no se desbloqueo al arrancar
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/alfred-data-check

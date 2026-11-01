@@ -1,0 +1,8 @@
+[Unit]
+Description=Alfred: comprobar la particion de datos 3 minutos despues de arrancar
+
+[Timer]
+OnBootSec=3min
+
+[Install]
+WantedBy=timers.target

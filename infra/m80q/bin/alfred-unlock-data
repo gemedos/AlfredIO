@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Desbloquea a mano la partición de datos cuando el TPM no lo ha hecho al arrancar.
+#   sudo alfred-unlock-data                 # pide la clave de recuperación y monta
+#   sudo alfred-unlock-data --reenroll-tpm  # además vuelve a sellar con el TPM
+#                                           # (úsalo tras actualizar la BIOS o cambiar Secure Boot)
+set -euo pipefail
+[[ $EUID -eq 0 ]] || { echo "Ejecuta con sudo." >&2; exit 1; }
+# shellcheck disable=SC1091
+. /etc/alfred/m80q.env
+
+MAPPER=alfred-data
+dev="/dev/disk/by-uuid/$DATA_LUKS_UUID"
+
+if [[ ! -e "/dev/mapper/$MAPPER" ]]; then
+    echo "Escribe la CLAVE DE RECUPERACIÓN de la partición de datos:"
+    cryptsetup open "$dev" "$MAPPER"
+fi
+mountpoint -q "$DATA_MOUNT" || mount "$DATA_MOUNT"
+echo "Montada en $DATA_MOUNT."
+
+if [[ "${1:-}" == "--reenroll-tpm" ]]; then
+    echo "Volviendo a sellar con el TPM (pedirá otra vez la clave de recuperación)..."
+    systemd-cryptenroll --wipe-slot=tpm2 --tpm2-device=auto --tpm2-pcrs=7 "$dev"
+fi
+
+# Arranca Docker rootless del usuario de Alfred (no arrancó porque faltaban los datos).
+uid=$(id -u "$ALFRED_USER" 2>/dev/null || true)
+if [[ -n "$uid" ]]; then
+    systemctl start "user@$uid.service"
+    sudo -u "$ALFRED_USER" XDG_RUNTIME_DIR="/run/user/$uid" systemctl --user start docker.service || true
+fi
+/usr/local/sbin/alfred-notify "Partición de datos desbloqueada a mano por $(logname 2>/dev/null || echo admin)." || true
