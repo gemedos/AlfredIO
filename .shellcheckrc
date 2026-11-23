@@ -1,0 +1,4 @@
+# Las variables de configuración vienen de /etc/alfred/*.env, cargadas con `source`.
+disable=SC2154
+external-sources=true
+source-path=SCRIPTDIR

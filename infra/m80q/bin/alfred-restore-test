@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Prueba de restauración: recupera de la última copia el canario y /etc/alfred,
+# comprueba que coinciden y verifica el repositorio. Se lanza cada mes y se puede lanzar a mano:
+#   sudo alfred-restore-test
+set -euo pipefail
+# shellcheck disable=SC1091
+. /etc/alfred/m80q.env
+
+STATE=/var/lib/alfred
+export RESTIC_REPOSITORY="$BACKUP_MOUNT/restic"
+export RESTIC_PASSWORD_FILE="$DATA_MOUNT/secrets/restic.pass"
+export RESTIC_CACHE_DIR="$DATA_MOUNT/.cache/restic"
+
+fail() {
+    /usr/local/sbin/alfred-notify "Prueba de restauración FALLIDA: $1" || true
+    echo "FALLO: $1" >&2
+    exit 1
+}
+
+mountpoint -q "$DATA_MOUNT" || fail "la partición de datos no está montada"
+# Se restaura dentro de la partición cifrada: lo restaurado incluye secretos.
+tmp=$(mktemp -d -p "$DATA_MOUNT" restore-test.XXXXXX)
+mounted_here=0
+cleanup() {
+    rm -rf "$tmp"
+    if ((mounted_here == 1)); then umount "$BACKUP_MOUNT" || true; fi
+}
+trap cleanup EXIT
+if ! mountpoint -q "$BACKUP_MOUNT"; then
+    mount "$BACKUP_MOUNT" 2>/dev/null || fail "no se puede montar el disco USB"
+    mounted_here=1
+fi
+
+restic snapshots --latest 1 --compact || fail "no hay copias"
+restic restore latest --target "$tmp" \
+    --include "$DATA_MOUNT/data/.restore-canary" --include /etc/alfred \
+    || fail "restic restore"
+
+expected=$(cat "$STATE/canary.sha256" 2>/dev/null || true)
+got=$(sha256sum <"$tmp$DATA_MOUNT/data/.restore-canary" | cut -d' ' -f1)
+[[ -n "$expected" && "$got" == "$expected" ]] || fail "el canario restaurado no coincide"
+echo "OK: canario restaurado idéntico"
+
+if diff -rq /etc/alfred "$tmp/etc/alfred"; then
+    echo "OK: /etc/alfred restaurado idéntico al actual"
+else
+    echo "AVISO: /etc/alfred ha cambiado desde la última copia (normal si lo has editado hoy)"
+fi
+
+restic check || fail "restic check"
+date +%s >"$STATE/last-restore-test-ok"
+/usr/local/sbin/alfred-notify "Prueba de restauración OK (copia del $(restic snapshots --latest 1 --json | jq -r '.[0].time[:16]'))" || true

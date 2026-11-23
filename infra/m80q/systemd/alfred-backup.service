@@ -1,0 +1,8 @@
+[Unit]
+Description=Alfred: copia de seguridad cifrada (restic) al disco USB
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/alfred-backup
+Nice=10
+IOSchedulingClass=idle

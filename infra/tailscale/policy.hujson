@@ -1,0 +1,22 @@
+// Política de acceso de la tailnet de Alfred (Fase 0).
+// Pégala ENTERA en https://login.tailscale.com/admin/acls y guarda.
+// Todo lo que no está permitido aquí está denegado.
+{
+	// Sólo los administradores de la tailnet pueden etiquetar un equipo como servidor de Alfred.
+	"tagOwners": {
+		"tag:alfred": ["autogroup:admin"],
+	},
+
+	"acls": [
+		// Tus dispositivos (PC, móvil) → M80q: SÓLO SSH.
+		// Los puertos de Home Assistant, etc. se añadirán aquí en su fase, uno a uno.
+		// Si algún día entra otra persona en la tailnet, cambia autogroup:member por tu correo.
+		{"action": "accept", "src": ["autogroup:member"], "dst": ["tag:alfred:22"]},
+
+		// No hay ninguna regla con src tag:alfred: el M80q NO puede iniciar conexiones
+		// hacia tus dispositivos. Tus dispositivos tampoco se ven entre sí.
+	],
+
+	// Sin Tailscale SSH: se usa OpenSSH con clave.
+	"ssh": [],
+}

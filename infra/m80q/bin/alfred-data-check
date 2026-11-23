@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Tras el arranque, avisa por Telegram si la partición de datos no se ha desbloqueado sola.
+set -euo pipefail
+# shellcheck disable=SC1091
+. "${ALFRED_ETC:-/etc/alfred}/m80q.env"
+
+if mountpoint -q "$DATA_MOUNT"; then
+    exit 0
+fi
+/usr/local/sbin/alfred-notify "ATENCIÓN: la partición de datos NO se ha desbloqueado al arrancar (¿BIOS o Secure Boot cambiados?). Docker y Alfred están parados. Entra por SSH y ejecuta: sudo alfred-unlock-data --reenroll-tpm"
+exit 1

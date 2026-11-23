@@ -1,0 +1,13 @@
+// Instalado por infra/m80q/10-base.sh. Se suma a 50unattended-upgrades de Debian,
+// que ya instala las actualizaciones de seguridad y de versión menor de Debian 13.
+// Los repositorios de Docker y Tailscale NO se actualizan solos: ver infra/m80q/README.md.
+
+// Si una actualización necesita reinicio (kernel, libc), reinicia de madrugada.
+// El disco de datos se desbloquea con el TPM, así que todo vuelve solo.
+Unattended-Upgrade::Automatic-Reboot "true";
+Unattended-Upgrade::Automatic-Reboot-WithUsers "true";
+Unattended-Upgrade::Automatic-Reboot-Time "04:30";
+
+Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+Unattended-Upgrade::Remove-New-Unused-Dependencies "true";
+Unattended-Upgrade::SyslogEnable "true";

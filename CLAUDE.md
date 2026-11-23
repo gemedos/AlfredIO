@@ -79,7 +79,7 @@ Capa de permisos + registro de auditoría envolviendo todas las herramientas
 - Mini PC con su **cargador original**, sobre superficie dura, con ventilación libre.
 - **Enchufe inteligente con medición** (Shelly Plug M Gen3) para vigilar el consumo; **corte automático** por umbral anómalo y aviso por Telegram.
 - **Alerta de temperatura** (`lm-sensors`) por Telegram al superar un límite; apagado ordenado si se mantiene.
-- Tira LED y su fuente de 5 V: fuente con protecciones; limitar brillo (cada metro de WS2812B a 60 LED/m puede dar hasta ~3,6 A a todo blanco).
+- Tira LED (~50 cm, nunca en blanco total): sin fuente dedicada; se alimenta por USB (cargador de móvil de 5 V y 2 A con certificación CE, o puerto USB 3.0 del mini PC) con límite de corriente en WLED ("Maximum current" ~400 mA). Si se alarga la tira o se usa una fuente de red, debe llevar protecciones y sello CE.
 
 ### 5.5 Estación de USB sospechosos
 - La hace **un script fijo, no el LLM**. Alfred nunca lee el contenido de esos archivos.
@@ -225,13 +225,14 @@ Móvil (voz y Telegram, por Tailscale) ──► Mini PC M80q
 
 **Hub**: Home Assistant en Docker en el M80q (0 €; se descarta la Raspberry Pi).
 
-**Luz de la mesa**: ESP32 con **WLED** + tira WS2812B de 5 V (1-2 m, 60 LED/m, IP30) alimentada de la red con **fuente de 5 V y 5 A**. Cada metro puede dar hasta ~3,6 A a todo blanco: limitar el brillo y unir las masas (GND) de fuente, tira y ESP32. Opcionales: resistencia de 330 Ω, condensador de 1000 µF, adaptador de nivel 74AHCT125. Los presets son escenas de Home Assistant o efectos de WLED.
+**Luz de la mesa** (decisión de Antonio, nov. 2026): ESP32 con **WLED** + tira WS2812B de 5 V de solo **~50 cm** (15-30 LED), nunca en blanco total, **sin fuente de 5 V y 5 A**: consumo real ~0,2-0,5 A (peor caso a todo blanco ~0,9-1,8 A). Alimentación por USB desde un cargador de móvil de 5 V y 2 A con CE o desde un puerto USB 3.0 del mini PC (900 mA), con "Maximum current" de WLED en ~400 mA. Unir masas (GND) de ESP32 y tira; resistencia de 330 Ω en la línea de datos y condensador de 470-1000 µF en la alimentación de la tira (~1 €); adaptador de nivel 74AHCT125 opcional. Si en el futuro se alarga la tira (1-2 m, ~3,6 A por metro a todo blanco), volver a una fuente de 5 V y 5 A con protecciones. Los presets son escenas de Home Assistant o efectos de WLED.
 
 **Aplique de pared (alto, sin cable)**: foco/aplique LED a pilas con mando. Solo se controla con el emisor IR (KY-005) **si su mando es infrarrojo** y hay línea de vista; si es de radiofrecuencia hace falta otra solución barata. **Comprobarlo con un aparato antes de montar nada.** Un ESP32 con tira de LEDs no es viable con pilas.
 
 **Audio**
 - El audio **va por cable** (más calidad que cualquier receptor Bluetooth, que queda limitado por el códec y cuesta más): mini PC → jack de 3,5 mm (o DAC USB barato de 10-15 € si hay ruido) → altavoz. Por Bluetooth, solo el móvil.
 - **Selector de entrada con relés** (decisión de Antonio: no depender del mando del altavoz): el mini PC y un **receptor Bluetooth** (para el móvil) entran a un **módulo de 2 relés** (uno por canal izquierdo/derecho, contactos conmutados) y la salida va a la entrada AUX del altavoz, que queda siempre en AUX. Funciona con cualquier altavoz con entrada AUX (jack o RCA). Con **tres** fuentes (p. ej. también el PC de sobremesa) hay que encadenar más relés o usar la segunda entrada propia del altavoz: **decisión abierta**. El módulo debe ser de disparo bajo y con optoacoplador (compatible con 3,3 V del ESP32).
+- **Calidad del receptor Bluetooth**: el límite lo pone el códec (SBC, o AAC/aptX si móvil y receptor lo soportan), no el receptor; para música desde el móvil no se nota. Elegir uno con salida de 3,5 mm y AAC/aptX. Si el altavoz elegido ya trae Bluetooth, no hace falta receptor ni relé (móvil directo, mini PC por cable): decidir al elegir altavoz.
 - **Silenciar la fuente un instante antes de conmutar** (los relés hacen clic). Si hay zumbido por bucle de masa: aislador (~10 €). La latencia de Bluetooth y de la red supera los 100 ms: para vídeo y juegos, usar el cable.
 - Alfred tiene un **volumen máximo** configurado (que ningún error o mensaje malicioso pueda subir el sonido de golpe de noche); el volumen se regula por software en el mini PC.
 - **Música** que pone Alfred: sale del mini PC por el cable. Vía **Spotify**: integración de Spotify de Home Assistant, exige **Premium** (desde febrero de 2026 también para crear la aplicación de desarrollador) y que el dispositivo de reproducción esté registrado; el mini PC aparece como dispositivo con **librespot** (Spotify Connect, gratuito y de código abierto). Vía **biblioteca propia**: Navidrome o MPD con Music Assistant, 0 € y sin suscripción.
@@ -286,7 +287,7 @@ Reglas de velocidad y seguridad: pedir pronto las piezas con envío lento; progr
 | Altavoz 3 W, 4 Ω, 40 mm (2 uds) | 4,9 de valoración (conector PH2.0: puede requerir pelar cables) | 1,09 $ | [Ver](https://www.aliexpress.us/item/2251832675015944.html) |
 | Tira WS2812B (mesa) | 10.000+ vendidas; la ficha no indica longitud ni LED/m (elegir 60/m, IP30) | 3,20 $ | [Ver](https://www.aliexpress.us/item/2251801850504415.html) |
 | Tira WS2812B, tienda española | Bobina de 5 m, 60 LED/m (la de 1 m está agotada) | 24,99 € | [Ver](https://www.electrohobby.es/ws2812b/315-bobina-5-m-ws2812b.html) |
-| Fuente de 5 V para la tira | ElectroHobby, 5 V 5 A (menciona protecciones; no menciona sello CE) | 9,90 € | [Ver](https://www.electrohobby.es/alimentador/504-fuente-5v-5a-25w.html) |
+| ~~Fuente de 5 V para la tira~~ | **Ya no hace falta** (tira de ~50 cm por USB; ahorro 9,90 €). Solo si se alarga la tira: ElectroHobby 5 V 5 A | (9,90 €) | [Ver](https://www.electrohobby.es/alimentador/504-fuente-5v-5a-25w.html) |
 | Módulo de 2 relés (selector de audio) | 5 V, disparo bajo, 4,8 de valoración | 1,09 $ | [Ver](https://www.aliexpress.us/item/3256809245535905.html) |
 | Receptor Bluetooth con salida AUX/RCA | Bluetooth 5.3, 4,9 de valoración, 800+ vendidos | 3,80 $ | [Ver](https://www.aliexpress.us/item/3256812914560779.html) |
 | Emisor infrarrojo KY-005 | 4,9 de valoración, 251 vendidos | 1,09 $ | [Ver](https://www.aliexpress.us/item/3256806601659253.html) |

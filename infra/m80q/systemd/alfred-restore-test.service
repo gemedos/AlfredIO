@@ -1,0 +1,8 @@
+[Unit]
+Description=Alfred: prueba de restauracion de la ultima copia
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/alfred-restore-test
+Nice=10
+IOSchedulingClass=idle

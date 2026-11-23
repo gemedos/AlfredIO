@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Envía un aviso del sistema por Telegram (bot de alertas, no el de Alfred).
+#   alfred-notify "mensaje"
+#   alfred-notify --discover-chat-id   # muestra los chats que han escrito al bot
+# El token nunca va en la línea de comandos (se vería en `ps`): se pasa a curl por stdin.
+# Variables para pruebas: ALFRED_ETC, ALFRED_NOTIFY_DRYRUN=1 (imprime en vez de enviar).
+set -euo pipefail
+
+ALFRED_ETC="${ALFRED_ETC:-/etc/alfred}"
+SECRETS="$ALFRED_ETC/secrets.env"
+HOST_TAG="$(hostname -s 2>/dev/null || echo m80q)"
+MAX_LEN=3800
+
+load_secrets() {
+    if [[ ! -r "$SECRETS" ]]; then
+        logger -t alfred-notify "sin $SECRETS; aviso no enviado" 2>/dev/null || true
+        echo "alfred-notify: no se puede leer $SECRETS" >&2
+        exit 1
+    fi
+    # shellcheck disable=SC1090
+    . "$SECRETS"
+    if [[ -z "${TELEGRAM_BOT_TOKEN:-}" ]]; then
+        echo "alfred-notify: falta TELEGRAM_BOT_TOKEN en $SECRETS" >&2
+        exit 1
+    fi
+}
+
+telegram() {
+    # $1 = método de la API; el resto, argumentos extra de curl.
+    local method="$1"; shift
+    printf 'url = "https://api.telegram.org/bot%s/%s"\n' "$TELEGRAM_BOT_TOKEN" "$method" \
+        | curl -fsS --max-time 15 --retry 3 --retry-delay 5 -K - "$@"
+}
+
+if [[ "${1:-}" == "--discover-chat-id" ]]; then
+    load_secrets
+    telegram getUpdates | jq -r '.result[] | (.message // .channel_post) | .chat | "\(.id)\t\(.first_name // .title // "")"' | sort -u
+    exit 0
+fi
+
+[[ $# -ge 1 && -n "$1" ]] || { echo "Uso: alfred-notify \"mensaje\"" >&2; exit 2; }
+msg="[$HOST_TAG] $*"
+msg="${msg:0:$MAX_LEN}"
+
+# Queda siempre registro en el journal (sin secretos), aunque Telegram falle.
+logger -t alfred-notify -- "$msg" 2>/dev/null || true
+
+if [[ "${ALFRED_NOTIFY_DRYRUN:-0}" == "1" ]]; then
+    printf 'DRYRUN: %s\n' "$msg"
+    exit 0
+fi
+
+load_secrets
+[[ -n "${TELEGRAM_CHAT_ID:-}" ]] || { echo "alfred-notify: falta TELEGRAM_CHAT_ID" >&2; exit 1; }
+telegram sendMessage -o /dev/null \
+    --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" \
+    --data-urlencode "text=$msg"

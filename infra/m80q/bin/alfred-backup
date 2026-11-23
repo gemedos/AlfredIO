@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Copia de seguridad cifrada (restic) al disco USB. La lanza alfred-backup.timer cada noche.
+# El disco sólo se monta durante la copia y se desmonta al acabar.
+set -euo pipefail
+# shellcheck disable=SC1091
+. /etc/alfred/m80q.env
+
+STATE=/var/lib/alfred
+export RESTIC_REPOSITORY="$BACKUP_MOUNT/restic"
+export RESTIC_PASSWORD_FILE="$DATA_MOUNT/secrets/restic.pass"
+export RESTIC_CACHE_DIR="$DATA_MOUNT/.cache/restic"
+
+fail() {
+    /usr/local/sbin/alfred-notify "Copia de seguridad FALLIDA: $1" || true
+    exit 1
+}
+
+[[ -n "${BACKUP_DISK_UUID:-}" ]] || fail "BACKUP_DISK_UUID vacío en /etc/alfred/m80q.env"
+mountpoint -q "$DATA_MOUNT" || fail "la partición de datos no está montada"
+
+mounted_here=0
+cleanup() {
+    if ((mounted_here == 1)); then umount "$BACKUP_MOUNT" || true; fi
+}
+trap cleanup EXIT
+if ! mountpoint -q "$BACKUP_MOUNT"; then
+    mount "$BACKUP_MOUNT" 2>/dev/null || fail "no se puede montar el disco USB (¿está conectado?)"
+    mounted_here=1
+fi
+
+# Canario: un archivo aleatorio por copia; la prueba de restauración comprueba que vuelve igual.
+canary="$DATA_MOUNT/data/.restore-canary"
+head -c 32 /dev/urandom | base64 >"$canary"
+sha256sum <"$canary" | cut -d' ' -f1 >"$STATE/canary.sha256.pending"
+
+# Qué se copia: configuración del sistema, usuarios y la partición de datos.
+# No se copian las imágenes y contenedores de Docker: se reconstruyen desde el repo.
+restic backup --tag auto --exclude-caches \
+    --exclude "$DATA_MOUNT/docker" --exclude "$DATA_MOUNT/.cache" \
+    /etc /home "$DATA_MOUNT" \
+    || fail "restic backup"
+mv "$STATE/canary.sha256.pending" "$STATE/canary.sha256"
+
+restic forget --prune --keep-daily 7 --keep-weekly 4 --keep-monthly 6 || fail "restic forget"
+
+# Domingos: verificación de integridad leyendo un 5 % de los datos.
+if [[ "$(date +%u)" == "7" ]]; then
+    restic check --read-data-subset=5% || fail "restic check"
+fi
+
+date +%s >"$STATE/last-backup-ok"

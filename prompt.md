@@ -69,7 +69,7 @@ Dime qué hace falta y, tras mi "adelante", deja el equipo listo: Linux actualiz
 **Para mí**: montar el satélite con tu guía paso a paso y las piezas ya compradas.
 
 ### Fase 4 — Domótica
-- **Home Assistant** en Docker, **WLED** para la tira de la mesa (ESP32 con fuente de 5 V de 5 A, límite de brillo), Wake-on-LAN para el PC de sobremesa, **Shelly Plug** con corte por consumo anómalo.
+- **Home Assistant** en Docker, **WLED** para la tira de la mesa (ESP32 y tira de ~50 cm alimentadas por USB, sin fuente dedicada, con límite de corriente en WLED; ver Anexo E de `CLAUDE.md`), Wake-on-LAN para el PC de sobremesa, **Shelly Plug** con corte por consumo anómalo.
 - **Selector de audio**: módulo de 2 relés (L/R) + receptor Bluetooth + cable del mini PC al altavoz, con el altavoz siempre en AUX. Dime las comprobaciones de seguridad eléctrica y el esquema de conexión.
 - **Aplique LED a pilas**: antes de escribir nada, dime cómo comprobar si su mando es IR o RF. Si es IR, emisor KY-005 con línea de vista; si es RF, propón alternativa barata.
 - **Más adelante**, según el Wi-Fi y el alcance: sensores de puerta (ESP32-C3 o Zigbee) y timbre.
