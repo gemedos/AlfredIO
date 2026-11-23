@@ -46,6 +46,9 @@ home=$(getent passwd "$ALFRED_USER" | cut -d: -f6)
 
 log "Datos de Docker en $DATA_MOUNT/docker (cifrado)"
 install -d -o "$ALFRED_USER" -g "$ALFRED_USER" -m 0710 "$DATA_MOUNT/docker"
+# `install -d` crea los directorios intermedios a nombre de root; por eso se crea ~/.config
+# aparte, a nombre de alfred (si no, Docker rootless no puede crear ~/.config/systemd).
+install -d -o "$ALFRED_USER" -g "$ALFRED_USER" -m 0700 "$home/.config"
 install -d -o "$ALFRED_USER" -g "$ALFRED_USER" -m 0700 "$home/.config/docker"
 sed "s|@DATA_MOUNT@|$DATA_MOUNT|" "$M80Q_DIR/files/docker/daemon.json" >"$home/.config/docker/daemon.json"
 chown "$ALFRED_USER:$ALFRED_USER" "$home/.config/docker/daemon.json"

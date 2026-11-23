@@ -2,6 +2,15 @@
 
 Registro de lo que se decide y por qué. Lo más reciente, arriba. Las decisiones de base están en `CLAUDE.md` (sección 3).
 
+## 2026-11-23 — Fase 0 ejecutada en el M80q
+
+**El M80q va, de momento, por wifi con una antena USB Realtek, no por cable.**
+La guía recomienda cable para un servidor 24 h. Se usa wifi mientras no hay cable disponible. Hizo falta `firmware-realtek` y NetworkManager (`eno1` queda "sin gestión"). La IP wifi tiene reserva DHCP en el router. Riesgo conocido: el wifi es menos estable que el cable y el DNS tuvo que arreglarse reiniciando NetworkManager. Se vuelve a cable en cuanto se pueda; no hay que cambiar nada en los scripts, que no dependen del nombre de la interfaz.
+
+**Resultado de la ejecución.** Pasos 0, 10, 20, 30, 40, 50 y 70 y `verify.sh`: OK, con dos avisos esperados (copias: falta el disco USB; consumo: falta el Shelly). Desbloqueo por TPM comprobado tras reiniciar. Pendientes: paso 60 y la parte de consumo del 70.
+
+**Corrección en `50-docker-rootless.sh`.** `install -d` creaba `~/.config` a nombre de root y Docker rootless no podía crear `~/.config/systemd`. Ahora se crea `~/.config` a nombre de alfred antes. Se comprobó a mano (`chown` y repetir el script) y el script corregido no se ha vuelto a ejecutar entero.
+
 ## 2026-11-01 — Fase 0: preparar el M80q
 
 **Sistema: Debian 13 (estable), sin escritorio, instalación limpia sobre Windows 11.**

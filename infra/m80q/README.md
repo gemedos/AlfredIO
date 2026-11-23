@@ -142,10 +142,17 @@ systemctl --user stop docker                     # (como alfred) parar Docker
 - **Te has quedado sin SSH**: teclado y pantalla en el M80q, entra con tu usuario y `sudo ufw disable` o revisa `/etc/ssh/sshd_config.d/10-alfred.conf`.
 - **Aviso "la partición de datos NO se ha desbloqueado"** (pasa tras actualizar la BIOS o tocar Secure Boot): entra por SSH y `sudo alfred-unlock-data --reenroll-tpm` (pide la clave de recuperación dos veces).
 - **No llegan avisos**: `sudo alfred-notify prueba` y mira el error; `journalctl -t alfred-notify`.
+- **No puedes pegar en una terminal**: en Git Bash, botón derecho → Paste o Shift+Insert (Ctrl+V no funciona). En la consola física del M80q no hay portapapeles: trabaja por SSH.
+- **La clave SSH no entra y pide la contraseña de Debian**: mira `ls -l ~/.ssh/authorized_keys`; si pesa 0 bytes, la clave no se copió (el comando de la sección 1 se ejecutó en el sitio equivocado o la clave pública no existía). Los comandos `$env:...` son de PowerShell en el PC, no de la consola del M80q.
+- **`ping` dice "Destination host unreachable" respondiendo tu propia IP**: nadie contesta en esa dirección (el equipo está apagado, sin red o con otra IP). En Windows ese resultado sale con "0% loss" aunque no haya respuesta.
+- **Con antena wifi USB (Realtek) no hay interfaz o falla el firmware** (`rtl8xxxu ... failed to load firmware`): `sudo apt install firmware-realtek` y reconectar la antena. Para el wifi se usó NetworkManager (`sudo nmtui`); `eno1` queda "sin gestión" y lo lleva el sistema base.
+- **El wifi se queda "desconectado" o falla el DNS** (`resolv.conf` sin líneas `nameserver`): `sudo systemctl restart NetworkManager` y comprueba `cat /etc/resolv.conf`; marca la conexión con `nmcli connection modify "NOMBRE" connection.autoconnect yes`.
+- **El paso 50 falla con `mkdir: ... /home/alfred/.config/systemd: Permiso denegado`**: ya corregido en el script (`.config` se crea a nombre de alfred). Si te pasó con una versión anterior: `sudo chown alfred:alfred /home/alfred/.config` y repite el script.
 
 ## Qué está probado y qué no
 
 - **Probado en el repo** (`./check.sh`): shellcheck sin avisos en todos los scripts; 23 tests de la lógica de temperatura, consumo, avisos, red de Tailscale y configuración.
-- **Sin probar en el M80q** (se prueba al ejecutarlo): instalación de paquetes, desbloqueo por TPM y reinicio, Docker rootless, restic, lectura de `coretemp`, URL del repositorio de Tailscale para Debian 13 (`trixie`).
+- **Probado en el M80q (2026-11-23)**: pasos 0-5 y 7 y `verify.sh` (resultado OK, con los dos avisos de copias y consumo), reinicio con desbloqueo automático por TPM, entrada por Tailscale y simulación de aviso de temperatura. El paso 50 necesitó el arreglo de `.config` descrito arriba.
+- **Sin probar en el M80q**: restic y la prueba de restauración (paso 60), la vigilancia de consumo con el Shelly y `alfred-unlock-data --reenroll-tpm`.
 - **Depende de hardware que no tienes aún**: copias (caja USB para el disco de 1 TB) y vigilancia de consumo (Shelly).
 - **Estimaciones**: umbrales de temperatura (85/95 °C) y de consumo (65 W aviso, ~85 W corte).
