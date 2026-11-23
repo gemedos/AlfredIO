@@ -25,7 +25,7 @@ Construir Alfred, un asistente personal tipo secretaria que corre en mi mini PC 
 ## Restricciones que no se negocian
 
 - Todo por **API** al principio, con una capa de proveedor intercambiable (compatible con OpenAI, `base_url` configurable). **Sin modelo local en el MVP.**
-- **Permisos en código**: herramientas con nivel 1, 2 o 3; el nivel 3 exige mi aprobación en Telegram. Lista de herramientas permitidas por perfil. El modelo nunca ejecuta nada ni ve credenciales.
+- **Permisos en código**: herramientas con nivel 1, 2 o 3; el nivel 3 exige mi aprobación en Telegram. Lista de herramientas permitidas por perfil. El modelo nunca ejecuta nada ni ve credenciales. Excepciones de aprobación únicas: las de la sección 5.7 de `CLAUDE.md` (aprendizaje de texto y herramientas de nivel 0).
 - **Lector en cuarentena** (sin herramientas, solo JSON con esquema estricto validado) para cualquier contenido no fiable. Nunca combinar datos privados + contenido no fiable + comunicación externa en el mismo contexto.
 - **Tailscale, cero puertos abiertos**, contenedores sin root, lista blanca de salida, copias cifradas, registro de auditoría, parada de emergencia `/stop`, tope de coste diario y mensual.
 - **No suspendas el mini PC.** Vigilancia de temperatura y consumo con aviso por Telegram.
@@ -47,9 +47,12 @@ Dime qué hace falta y, tras mi "adelante", deja el equipo listo: Linux actualiz
 **Para mí**: comprobar el modo de Wake-on-LAN en la BIOS y apuntar qué cargador trae.
 
 ### Fase 1 — Núcleo del agente (con spike de OpenJarvis)
-1. **Spike aislado de OpenJarvis** (Apache-2.0, repo `open-jarvis/openjarvis`) en un contenedor sin acceso a mis datos, sin presets de shell ni de código, sin OAuth. Lee su código y su instalador **antes** de ejecutarlos. Evalúa: ¿ahorra trabajo real frente a un bucle de agente propio? ¿encaja con permisos por nivel, lector en cuarentena, tope de coste, auditoría y Telegram? Entrega una recomendación breve (usarlo como base, usar solo piezas, o descartarlo) y **espera mi decisión**.
+**Antes de empezar, lee `docs/FASE1.md`** (informe de traspaso con todo lo decidido y el orden de trabajo).
+
+1. **Spike de OpenJarvis y Hermes: parte A hecha el 2026-11-24** (lectura, sin ejecutar nada; informe en `docs/spike-openjarvis.md`); conclusión: no se usan como base. La parte B (contenedor aislado sin acceso a mis datos, sin presets de shell ni de código, sin OAuth) solo si yo lo pido. Si se hiciera, lee su código y su instalador **antes** de ejecutarlos. Evalúa: ¿ahorra trabajo real frente a un bucle de agente propio? ¿encaja con permisos por nivel, lector en cuarentena, tope de coste, auditoría y Telegram? Entrega una recomendación breve (usarlo como base, usar solo piezas, o descartarlo) y **espera mi decisión**.
 2. Después, construye el núcleo: proveedor intercambiable; registro de herramientas con `nombre, descripción, esquema, nivel`; bucle del agente con validación, permisos, recorte de resultados, límite de pasos y de tokens; auditoría de solo añadir; seguimiento de coste con tope y corte; bot de Telegram con botones Aprobar/Rechazar y `/stop`; perfiles como archivos de configuración.
-3. Modelo por defecto: el más barato fiable (referencia: Claude Haiku 5.5); uno más listo solo para tareas puntuales decididas por código. No uses Kimi/Moonshot con datos personales.
+3. **Autoaprendizaje** según la sección 5.7 de `CLAUDE.md` (aprobación automática solo para texto que venga de mí, skills solo de texto, herramientas nuevas en cuarentena, nivel 0 de cálculo puro, comandos de listado y reversión, consolidación semanal). Empieza por diseñarlo en un documento, sin código, y espera mi "adelante".
+4. Modelo por defecto: el más barato fiable (referencia: Claude Haiku 5.5); uno más listo solo para tareas puntuales decididas por código. No uses Kimi/Moonshot con datos personales.
 **Aceptación**: una herramienta de ejemplo de cada nivel; una herramienta no listada **falla**; nivel 3 sin aprobación **no se ejecuta**; el tope de coste corta la actividad; `/stop` funciona; todo cubierto por tests.
 
 ### Fase 2 — Perfiles y lector en cuarentena

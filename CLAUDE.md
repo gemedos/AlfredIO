@@ -14,7 +14,7 @@ Al final hay una sección 9 y los **Anexos A–J** con el detalle de diseño, co
 Además hay domótica de la habitación: tira LED en la mesa (WLED), aplique LED a pilas en la pared, selector de entrada del altavoz (relé + receptor Bluetooth), despertar el PC de sobremesa por red, enchufe con medición para vigilar el mini PC, y más adelante sensores de puerta/timbre y una tablet de pared.
 
 ### Alcance: solo secretaria
-Alfred comprueba estados, pone música, busca cosas en internet, avisa y manda mensajes **con aprobación**. **No es una herramienta de desarrollo**: no escribe ni despliega código, no arregla webs, no ejecuta comandos arbitrarios. Las tareas grandes de programación las hace Antonio desde su propia cuenta de Claude. No añadas capacidades fuera de este alcance aunque sean fáciles.
+Alfred comprueba estados, pone música, busca cosas en internet, avisa y manda mensajes **con aprobación**. **No es una herramienta de desarrollo**: no escribe ni despliega código de proyectos, no arregla webs, no ejecuta comandos arbitrarios. Las tareas grandes de programación las hace Antonio desde su propia cuenta de Claude. **Única excepción** (decidida el 2026-11-24): Alfred puede redactar **borradores de herramientas pequeñas para sí mismo** dentro del autoaprendizaje, en cuarentena y con las condiciones de la sección 5.7. No añadas capacidades fuera de este alcance aunque sean fáciles.
 
 ## 2. Objetivos, por orden de prioridad
 
@@ -33,7 +33,8 @@ Alfred comprueba estados, pone música, busca cosas en internet, avisa y manda m
 - **Agentes**: un agente principal más **perfiles** (instrucciones, lista de herramientas permitidas, credenciales y memoria propias). No montar sistemas multiagente complejos: cada salto cuesta tokens y acumula errores. La excepción es el **lector en cuarentena** (sección 5).
 - **Música**: por cable desde el mini PC al altavoz (jack o DAC USB); el móvil por Bluetooth. Selección de entrada con **módulo de 2 relés** (uno por canal L/R) más un **receptor Bluetooth**, de modo que el altavoz siempre esté en AUX. Funciona con cualquier altavoz con entrada AUX.
 - **Domótica**: Home Assistant en Docker en el mini PC; WLED para la tira; Wake-on-LAN para el PC; IR (KY-005) para el aplique a pilas **solo si su mando es infrarrojo** (comprobarlo antes). La tablet de pared queda para más adelante: los informes van por Telegram.
-- **OpenJarvis** (framework open source de Stanford, Apache-2.0) se evalúa como posible base del agente en un *spike* aislado antes de escribir un bucle de agente propio (sección 8, Fase 1).
+- **OpenJarvis** y **Hermes Agent**: evaluados (lectura de documentación y repos, sin ejecutar nada) el 2026-11-24. **No se usan como base**; el primer bucle de agente se escribe a mano. Solo se copian patrones, nunca código (ver `docs/spike-openjarvis.md` y `docs/DECISIONES.md`). Falta leer sus instaladores y parte del código por si hay más ideas.
+- **Modelo y pago:** por API, con clave de Claude Console exclusiva de Alfred (decidido el 2026-11-24). Detalle en `docs/DECISIONES.md`.
 
 ## 4. Arquitectura en una pantalla
 
@@ -55,9 +56,9 @@ Capa de permisos + registro de auditoría envolviendo todas las herramientas
 
 ### 5.1 Permisos en código, no en prompts
 - Cada herramienta declara un **nivel**: **1** libre (consultas, luces, música); **2** permitido con registro; **3** requiere **aprobación humana** (botón Aprobar/Rechazar en Telegram con resumen exacto de la acción).
-- **Nivel 3 obligatorio** para: enviar mensajes a terceros (huéspedes, clientes, correo), borrar o modificar datos, cualquier gasto o compra, cambiar configuración de seguridad o de red, instalar o activar un skill/MCP.
+- **Nivel 3 obligatorio** para: enviar mensajes a terceros (huéspedes, clientes, correo), borrar o modificar datos, cualquier gasto o compra, cambiar configuración de seguridad o de red, instalar o activar un skill/MCP o una herramienta nueva. **Excepciones únicas, definidas en la sección 5.7:** las skills de texto y los recuerdos del autoaprendizaje, y las herramientas de «nivel 0, cálculo puro». Nada más.
 - **Nunca automatizar pagos ni compras.** Alfred prepara y manda el enlace; paga Antonio. Si algún día se automatiza algo con dinero: tarjeta virtual con límite bajo y aprobación en cada operación.
-- **Sin herramienta de shell ni ejecución de código arbitrario para el modelo.** Nada de "ejecuta este comando".
+- **Sin herramienta de shell ni ejecución de código arbitrario para el modelo.** Nada de "ejecuta este comando". Una herramienta registrada y aprobada que corre en su contenedor no es una excepción a esto: el modelo solo la llama por nombre y con un esquema.
 - Cada perfil tiene su **lista de herramientas permitidas** (allowlist). Lo que no está listado no existe para ese perfil.
 
 ### 5.2 Contenido no fiable y la "trifecta letal"
@@ -88,8 +89,31 @@ Capa de permisos + registro de auditoría envolviendo todas las herramientas
 - Un archivo "limpio" no es garantía: dejarlo claro en el informe. Memorias USB totalmente desconocidas: riesgo físico en el puerto; avisar.
 
 ### 5.6 Cadena de suministro y proveedores
-- Revisar (leer el código) cualquier script de instalación, skill, MCP o dependencia nueva **antes** de ejecutarlo. Fijar versiones. No importar skills de terceros (OpenClaw, GitHub) sin revisión.
+- Revisar (leer el código) cualquier script de instalación, skill, MCP o dependencia nueva **antes** de ejecutarlo. Fijar versiones. No importar skills de terceros (OpenClaw, GitHub) sin revisión: las importadas solo se aceptan como texto, con el proceso de la sección 5.7.
 - Datos personales de huéspedes y de la empresa solo a proveedores aprobados, preferiblemente con acuerdo de tratamiento de datos. Minimizar lo que se envía al modelo.
+
+### 5.7 Autoaprendizaje, skills y herramientas nuevas (decidido el 2026-11-24)
+Alfred puede aprender, pero lo aprendido es **texto** y todo es reversible y auditable. Nada de lo siguiente toca permisos ni niveles: los decide siempre el código.
+
+**Categoría «aprendizaje»** (aprobación automática, reversible, auditada). No es una excepción al nivel 3: solo puede escribir texto en la memoria o en las skills.
+- **Auto-aprobado solo lo que viene de Antonio** (sus mensajes, correcciones y feedback directo). Lo derivado de **contenido externo** (correos, webs, documentos, mensajes de terceros) **queda pendiente** de su visto bueno, para evitar que un contenido malicioso deje una instrucción persistente.
+- **Temas vetados** (nunca se aprenden solos): dinero, credenciales, permisos, contactos de confianza y reglas del tipo «siempre aprueba/envía X».
+- Límites: máximo de lecciones por día y tamaño máximo de la memoria; las entradas se escanean contra patrones de inyección; el coste entra en el tope de gasto. Interruptor para pausar el autoaprendizaje.
+- Los recuerdos son datos personales: solo en la partición cifrada, no se envían a proveedores no aprobados, se pueden exportar y borrar.
+- **Visibilidad y reversión por Telegram** (nombres provisionales): `/aprendizajes` (id, fecha, resumen, origen, activa), `/aprendizaje <id>`, `/revertir <id>`, `/revertir hoy`, resumen semanal y pausa. Cada cambio va a la auditoría de solo añadir; revertir no borra el rastro.
+- **Consolidación semanal**, en local y con el mismo modelo barato por API: fusiona duplicados, resuelve contradicciones (gana lo más reciente), agrupa por tema y perfil y archiva sin borrar. Guarda una copia completa antes (`/revertir consolidación`), no añade lecciones nuevas ni toca permisos, y lo dudoso lo propone en el informe semanal.
+
+**Skills: solo texto.** Formato: subconjunto del estándar abierto Agent Skills (agentskills.io).
+- Una carpeta con `SKILL.md` (frontmatter `name`, `description`, `metadata`; el resto, markdown) y, opcionalmente, `references/` con **archivos de texto o markdown**. **Prohibidos** `scripts/`, `assets/` y binarios.
+- El campo `allowed-tools` del estándar **se rechaza o se ignora**: una skill nunca concede permisos ni activa herramientas.
+- Skills importadas de repos ajenos: se lee el archivo entero, se revisa (inyección de instrucciones, URLs, comandos, peticiones de claves), se fija por hash de commit con copia local, se asigna a un perfil concreto y, si hace falta, se reescribe. Validador propio (formato, tamaño, patrones peligrosos); el oficial `skills-ref` es solo referencia.
+
+**Herramientas nuevas (con código).** El autoaprendizaje puede **redactar el borrador** de una herramienta cuando detecta que un script ahorraría mucho, pero **no puede activarla** salvo en el caso de nivel 0.
+- El borrador queda en cuarentena con su descripción, su código y el motivo. Solo puede nacer de **peticiones o patrones de Antonio**, nunca de contenido externo; hay un máximo de borradores por semana.
+- Antes de llegar a Antonio: pruebas en contenedor sin red ni secretos, revisión automática de patrones peligrosos y tamaño máximo.
+- La herramienta **declara qué necesita** (red, archivos, mensajes, dinero, credenciales). **El nivel lo asigna el código** a partir de esa declaración, siempre el más alto que corresponda; Alfred no puede bajarlo. Lo declarado se hace cumplir con el sandbox (contenedor con permisos limitados); si el código hace algo no declarado, se bloquea y se avisa.
+- **Activarla es nivel 3:** Antonio lee el código y aprueba una vez por Telegram. Después actúa según su nivel (1 libre, 2 con registro, 3 con aprobación en cada uso). Se fija por hash; cualquier modificación es una versión nueva y vuelve a pedir aprobación. Queda en la auditoría y en `/aprendizajes`.
+- **Excepción, «nivel 0: cálculo puro»:** se activa sola si cumple **todo** esto, comprobado por el sandbox y no por lo que el script diga de sí mismo: sin red, sin acceso a archivos, sin secretos, sin efectos fuera de devolver un resultado; contenedor con límite de tiempo y memoria; pasa los tests y la revisión de patrones; nace de una petición o patrón de Antonio. Queda fijada por hash, auditada y revertible.
 
 ## 6. Control de costes
 - Tope **diario y mensual** de gasto de API, configurable, con corte automático y aviso por Telegram al 80 %.
@@ -112,7 +136,7 @@ Capa de permisos + registro de auditoría envolviendo todas las herramientas
 ## 8. Fases del proyecto (resumen; el detalle está en `prompt.md`)
 
 0. Preparar el M80q: sistema, endurecimiento, Tailscale, Docker, copias, vigilancia de temperatura y consumo.
-1. Núcleo del agente: proveedor intercambiable, registro de herramientas con niveles, auditoría, Telegram, tope de coste. **Antes: spike aislado de OpenJarvis** y decidir si se usa como base.
+1. Núcleo del agente: proveedor intercambiable, registro de herramientas con niveles, auditoría, Telegram, tope de coste, y las bases del autoaprendizaje (sección 5.7). El spike de OpenJarvis y Hermes está hecho en lectura: no se usan como base.
 2. Perfiles (Dexter, Bakit) y lector en cuarentena.
 3. Voz: Wyoming, Whisper, Piper, router de reglas, satélite ESP32-S3.
 4. Domótica: Home Assistant, WLED, relés de audio, IR, Wake-on-LAN, enchufe Shelly; luego sensores de puerta.

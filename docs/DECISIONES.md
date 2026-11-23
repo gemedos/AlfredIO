@@ -2,6 +2,51 @@
 
 Registro de lo que se decide y por qué. Lo más reciente, arriba. Las decisiones de base están en `CLAUDE.md` (sección 3).
 
+## 2026-11-24 — Fase 1: diseño del autoaprendizaje (solo diseño, sin código)
+
+**Hermes y OpenJarvis: no se usan como base.** Con lo leído (documentación pública; el código y los instaladores no se pudieron leer), ninguno documenta niveles 1/2/3 por código, tope de coste, auditoría de solo añadir ni lector en cuarentena. El primer bucle de agente se escribe a mano. Del repositorio de Hermes solo se copian patrones, nunca código: lista de usuarios permitidos con "denegar por defecto", lista de bloqueo fija, modos desatendidos que deniegan lo peligroso y quitar del entorno de las herramientas las variables con KEY, TOKEN o SECRET. Estado: provisional hasta leer los repos (ver `docs/spike-openjarvis.md`).
+
+**Autoaprendizaje: categoría propia "aprendizaje", con aprobación automática, reversible y auditada.**
+No es una excepción al nivel 3: el nivel 3 sigue exigiendo la aprobación de Antonio sin excepciones. Esta categoría solo puede escribir texto en la memoria o en las skills y nunca toca permisos ni herramientas.
+- Una skill es solo texto (markdown): sin scripts ni comandos. Una skill mala puede dar un mal consejo, no actuar.
+- **Auto-aprobado solo lo que viene de Antonio** (sus mensajes, correcciones y feedback directo).
+- **Lo derivado de contenido externo** (correos, webs, documentos) **queda pendiente de su visto bueno.** Motivo: evitar que un correo o web maliciosa haga que Alfred "aprenda" una instrucción persistente (inyección de prompts a largo plazo).
+- **Temas vetados** (nunca se aprenden solos): dinero, credenciales, permisos, contactos de confianza, reglas del tipo "siempre aprueba/envía X".
+- Límites: máximo de lecciones por día y tamaño máximo de memoria; el coste cuenta dentro del tope de gasto.
+- Los recuerdos son datos personales: solo en la partición cifrada, no se envían a modelos baratos con los que no se comparten datos personales, y se pueden exportar y borrar.
+
+**Visibilidad y reversión (Telegram):** `/aprendizajes` (lista: id, fecha, resumen, origen, activa), `/aprendizaje <id>` (texto completo, versión anterior, origen), `/revertir <id>`, `/revertir hoy`, resumen semanal (nuevo, más usado, dudoso) e interruptor para pausar el autoaprendizaje. Todo cambio va a la auditoría de solo añadir; revertir no borra el rastro. Los nombres de comandos son provisionales.
+
+**Skills importadas de repos ajenos:** solo texto; se lee entera antes de aceptarla; se revisa (inyección de instrucciones, URLs, comandos, peticiones de claves); se fija por hash de commit con copia local; se asigna a un perfil concreto, no a todos; si hace falta, se reescribe con palabras propias.
+
+**Consolidación semanal (para que no haya "aprendizaje sobre aprendizaje" sin estructura).**
+Una pasada que fusiona duplicados, resuelve contradicciones (gana lo más reciente), agrupa por tema y perfil, archiva lo que lleva meses sin usarse (sin borrar) y deja un informe.
+- Antes de empezar guarda una copia completa; `/revertir consolidación` vuelve atrás.
+- Solo reorganiza y resume: no añade lecciones nuevas ni toca permisos; mantiene el origen de cada una y respeta pendientes y temas vetados.
+- Lo que fusione sin perder información se aplica solo; descartar algo o resolver una contradicción dudosa se propone en el informe semanal.
+- **Se ejecuta en local, con el mismo modelo barato por API que usa Alfred.** Motivo: una tarea programada de la cuenta Pro corre en la nube sin acceso al M80q, obligaría a sacar la memoria del servidor (choca con "cero puertos" y con los datos personales), y usar la suscripción para automatizaciones de Alfred es una zona gris **sin comprobar**. Opción futura anotada: tarea programada en la cuenta Pro con una copia sin datos sensibles, cuando se sepa cuánto crece la memoria y estén comprobadas las condiciones.
+
+**Formato de las skills: subconjunto del estándar abierto Agent Skills (agentskills.io), solo markdown.**
+Leído en su especificación (Apache 2.0 el código, CC-BY-4.0 la documentación; originado en Anthropic): una skill es una carpeta con un `SKILL.md` (frontmatter YAML + markdown); solo `name` (1-64 caracteres, minúsculas, números y guiones, igual que la carpeta) y `description` (1-1024) son obligatorios; `scripts/`, `references/` y `assets/` son opcionales; se cargan por niveles (nombre y descripción al inicio, el cuerpo al activarse). La especificación no tiene sección de seguridad ni modelo de confianza.
+- Alfred acepta **solo `SKILL.md`**: sin `scripts/` ni `assets/`, y rechaza cualquier skill que los traiga.
+- El campo `allowed-tools` (herramientas "pre-aprobadas", experimental en el estándar) **se rechaza o se ignora**: los permisos los deciden los niveles en código, nunca una skill.
+- Campos permitidos: `name`, `description` y `metadata` (para origen, fecha, versión e id de la lección). Tamaño máximo propio y más estricto que el estándar (a fijar al diseñar el núcleo; Hermes y GEPA usan 15 KB como referencia).
+- El validador de Alfred lo escribimos nosotros (formato, tamaño, sin URLs ni comandos, patrones de inyección). El validador oficial `skills-ref` queda como referencia, no como dependencia, hasta revisarlo.
+- Ventaja: las skills quedan compatibles con el estándar sin heredar la parte de ejecución.
+
+**Herramientas nuevas creadas por el autoaprendizaje, y `references/` de texto.** (Refina la regla anterior de que los scripts nunca entran por el autoaprendizaje.)
+- Las skills admiten una carpeta `references/` con **solo texto o markdown**; siguen prohibidos `scripts/`, `assets/` y binarios.
+- Alfred puede **redactar el borrador** de una herramienta con código, pero **no activarla**: queda en cuarentena, y activarla es nivel 3 (Antonio lee el código y aprueba una vez). El nivel lo asigna el código a partir de lo que la herramienta declara necesitar, siempre el más alto, y el sandbox hace cumplir lo declarado. Se fija por hash; cualquier cambio vuelve a pedir aprobación.
+- Solo puede nacer de peticiones o patrones de Antonio, nunca de contenido externo, con máximo de borradores por semana, pruebas en contenedor sin red ni secretos y revisión de patrones peligrosos.
+- **Excepción, «nivel 0: cálculo puro»:** se activa sola (sin red, sin archivos, sin secretos, sin efectos fuera de devolver un resultado; contenedor con límite de tiempo y memoria; tests y revisión superados; comprobado por el sandbox, no por la declaración del script). Auditada, fijada por hash y revertible. Decisión de Antonio el 2026-11-24.
+- **`CLAUDE.md` y `prompt.md` modificados** para reflejarlo: alcance (sección 1), niveles (5.1), nueva sección 5.7, cadena de suministro (5.6), OpenJarvis/Hermes y pago (sección 3), Fase 1 (sección 8 y `prompt.md`). Estas son las **únicas** excepciones a «instalar o activar un skill/herramienta es nivel 3».
+
+**Pago del modelo: clave de API de Claude Console (pago por uso).** Decidido el 2026-11-24; sustituye a la opción de suscripción/tareas programadas, que queda solo como idea futura sin comprobar.
+- La clave va en el almacén de secretos del servidor (partición cifrada), nunca en el repo, en la línea de comandos ni en prompts.
+- Clave exclusiva para Alfred, separada de la de Clipmation y de cualquier otro uso, para poder revocarla sin afectar al resto.
+- Dos topes de gasto superpuestos: el del código de Alfred (que corta) y uno mensual en Claude Console para esa clave o espacio de trabajo, si la consola lo permite (**por comprobar en la consola**). El del código es el que manda; el de la consola es la red de seguridad.
+- Pendiente: elegir el modelo por defecto y el importe mensual del tope al diseñar el núcleo, con precios actuales comprobados.
+
 ## 2026-11-23 — Fase 0 ejecutada en el M80q
 
 **El M80q va, de momento, por wifi con una antena USB Realtek, no por cable.**
@@ -13,6 +58,9 @@ La guía recomienda cable para un servidor 24 h. Se usa wifi mientras no hay cab
 
 **Clipmation comparte el M80q con límites** (detalle en `docs/conflict-alfred-clipmation.md`).
 Usuario `clips` con su propio Docker rootless (`55-clips-user.sh`), sin sudo ni SSH y con datos en `/srv/alfred/clips` (0700, cifrado). Los límites (8 hilos = `CPUQuota=800%`, `CPUWeight=20`, `MemoryMax=8G`, `TasksMax=4096`) se ponen en el `user-UID.slice` de systemd, no en Docker: así valen para todo lo que corra ese usuario aunque los límites de cgroup de Docker rootless no estén delegados. Es una estimación sin probar en el M80q. `alfred-disk-check` avisa por Telegram al 80 % y al 90 % de la partición de datos. Pendiente: medir una tanda real (temperatura, CPU, disco) antes de activar el runner, y el aviso de "runner caído" cuando exista el contenedor.
+
+**Vigilante de red `alfred-net-watch` (por el wifi inestable).**
+El wifi se cayó varias veces: el registro muestra `4WAY_HANDSHAKE_TIMEOUT` y, tras la última caída, ningún intento más hasta reiniciar (causa del cuelgue sin confirmar). Cada minuto se comprueba si llega al router y se escala: reconectar a los 3 min, reiniciar NetworkManager y recargar el driver a los 6 y reiniciar el equipo a los 15 (máximo una vez cada 6 h, para no entrar en un bucle de reinicios). Los tiempos son una elección, ajustables en `m80q.env`. Sin red no hay aviso por Telegram hasta recuperarse. No sustituye al cable ni a mejorar la señal. Probado con tests en el repo, no en el M80q.
 
 ## 2026-11-01 — Fase 0: preparar el M80q
 
