@@ -1,0 +1,8 @@
+[Unit]
+Description=Alfred: vigilancia de la conexion de red
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/alfred-net-watch
+NoNewPrivileges=yes
+PrivateTmp=yes

@@ -1,0 +1,10 @@
+[Unit]
+Description=Alfred: vigilancia de la red cada minuto
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=1min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# Vigila que el M80q llegue al router (la lanza alfred-net-watch.timer cada minuto) y, si no, escala:
+#   NET_RECONNECT_MIN min sin red  -> reconectar el wifi con nmcli
+#   NET_RESET_MIN min              -> reiniciar NetworkManager y recargar el driver de la antena
+#   NET_REBOOT_MIN min             -> reiniciar el equipo (como mucho una vez cada NET_REBOOT_COOLDOWN_H horas)
+# Sin red no se puede avisar por Telegram: el aviso llega al recuperarse, con la duración de la caída.
+# Variables para pruebas: ALFRED_ETC, ALFRED_STATE_DIR, ALFRED_NOTIFY, ALFRED_PING, ALFRED_NMCLI,
+# ALFRED_SYSTEMCTL, ALFRED_MODPROBE, ALFRED_REBOOT, ALFRED_SLEEP, ALFRED_GATEWAY, ALFRED_WIFI_DRIVER, ALFRED_NOW.
+set -euo pipefail
+export LC_ALL=C
+
+ALFRED_ETC="${ALFRED_ETC:-/etc/alfred}"
+STATE_DIR="${ALFRED_STATE_DIR:-/var/lib/alfred}"
+NOTIFY="${ALFRED_NOTIFY:-/usr/local/sbin/alfred-notify}"
+PING="${ALFRED_PING:-ping}"
+NMCLI="${ALFRED_NMCLI:-nmcli}"
+SYSTEMCTL="${ALFRED_SYSTEMCTL:-systemctl}"
+MODPROBE="${ALFRED_MODPROBE:-modprobe}"
+SLEEP="${ALFRED_SLEEP:-sleep}"
+read -ra REBOOT_CMD <<<"${ALFRED_REBOOT:-systemctl reboot}"
+# shellcheck disable=SC1091
+. "$ALFRED_ETC/m80q.env"
+NET_RECONNECT_MIN="${NET_RECONNECT_MIN:-3}"
+NET_RESET_MIN="${NET_RESET_MIN:-6}"
+NET_REBOOT_MIN="${NET_REBOOT_MIN:-15}"
+NET_REBOOT_COOLDOWN_H="${NET_REBOOT_COOLDOWN_H:-6}"
+
+state="$STATE_DIR/net-state"
+FAILS=0 STEP=0 LAST_REBOOT=0
+# shellcheck disable=SC1090
+[[ -r "$state" ]] && . "$state"
+now="${ALFRED_NOW:-$(date +%s)}"
+save_state() { printf 'FAILS=%s\nSTEP=%s\nLAST_REBOOT=%s\n' "$FAILS" "$STEP" "$LAST_REBOOT" >"$state"; }
+
+gateway() {
+    if [[ -n "${ALFRED_GATEWAY:-}" ]]; then echo "$ALFRED_GATEWAY"; return; fi
+    ip route show default 2>/dev/null | awk '/^default/ {print $3; exit}' || true
+}
+wifi_iface() { "$NMCLI" -t -f DEVICE,TYPE device 2>/dev/null | awk -F: '$2=="wifi" {print $1; exit}' || true; }
+
+gw=$(gateway)
+if [[ -n "$gw" ]] && "$PING" -c 2 -W 2 "$gw" >/dev/null 2>&1; then
+    if ((FAILS >= NET_RECONNECT_MIN)); then
+        msg="La red del M80q ha vuelto tras unos $FAILS min sin conexión."
+        if ((STEP >= 3)); then msg+=" El equipo se reinició para recuperarla."
+        elif ((STEP >= 2)); then msg+=" Hizo falta reiniciar NetworkManager y la antena."
+        else msg+=" Se recuperó reconectando el wifi."; fi
+        "$NOTIFY" "$msg"
+    fi
+    FAILS=0 STEP=0
+    save_state
+    echo "Red OK ($gw)"
+    exit 0
+fi
+
+FAILS=$((FAILS + 1))
+echo "Sin red: $FAILS min seguidos (router: ${gw:-sin ruta por defecto})"
+iface=$(wifi_iface)
+
+if ((FAILS >= NET_RECONNECT_MIN && STEP < 1)); then
+    echo "Paso 1: reconectar el wifi"
+    if [[ -n "$iface" ]]; then "$NMCLI" device connect "$iface" || true; fi
+    STEP=1
+fi
+if ((FAILS >= NET_RESET_MIN && STEP < 2)); then
+    echo "Paso 2: reiniciar NetworkManager y recargar la antena"
+    "$SYSTEMCTL" restart NetworkManager || true
+    drv="${ALFRED_WIFI_DRIVER:-}"
+    if [[ -z "$drv" && -n "$iface" && -L "/sys/class/net/$iface/device/driver" ]]; then
+        drv=$(basename "$(readlink "/sys/class/net/$iface/device/driver")")
+    fi
+    if [[ -n "$drv" ]]; then
+        "$MODPROBE" -r "$drv" || true
+        "$SLEEP" 2
+        "$MODPROBE" "$drv" || true
+    fi
+    STEP=2
+fi
+if ((FAILS >= NET_REBOOT_MIN && STEP < 3)); then
+    if ((now - LAST_REBOOT >= NET_REBOOT_COOLDOWN_H * 3600)); then
+        echo "Paso 3: reiniciar el equipo"
+        STEP=3 LAST_REBOOT=$now
+        save_state
+        "${REBOOT_CMD[@]}"
+        exit 0
+    fi
+    echo "Reinicio pospuesto: ya se reinició hace menos de $NET_REBOOT_COOLDOWN_H h"
+fi
+save_state

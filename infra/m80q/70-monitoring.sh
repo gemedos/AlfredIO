@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Paso 7: vigilancia de temperatura (lm-sensors/coretemp), de espacio de disco y de consumo (Shelly), con avisos por Telegram.
+# Paso 7: vigilancia de temperatura (lm-sensors/coretemp), de espacio de disco, de la conexión de red y de consumo (Shelly), con avisos por Telegram.
 #   sudo ./70-monitoring.sh
 # El consumo sólo se activa si SHELLY_HOST está relleno (el Shelly aún no está comprado).
 # shellcheck source=lib/common.sh
@@ -8,9 +8,9 @@ require_root
 require_debian13
 load_config
 
-for b in alfred-temp-watch alfred-power-watch alfred-disk-check; do install_bin "$b"; done
+for b in alfred-temp-watch alfred-power-watch alfred-disk-check alfred-net-watch; do install_bin "$b"; done
 for u in alfred-temp-watch.service alfred-temp-watch.timer alfred-power-watch.service alfred-power-watch.timer \
-    alfred-disk-check.service alfred-disk-check.timer; do
+    alfred-disk-check.service alfred-disk-check.timer alfred-net-watch.service alfred-net-watch.timer; do
     install_unit "$u"
 done
 systemctl daemon-reload
@@ -22,6 +22,10 @@ systemctl enable --now alfred-temp-watch.timer
 log "Espacio de disco"
 /usr/local/sbin/alfred-disk-check || die "No se lee el espacio de $DATA_MOUNT"
 systemctl enable --now alfred-disk-check.timer
+
+log "Red"
+/usr/local/sbin/alfred-net-watch || warn "La comprobación de red falló (¿sin ruta por defecto?)"
+systemctl enable --now alfred-net-watch.timer
 
 log "Consumo"
 if [[ -n "${SHELLY_HOST:-}" ]]; then

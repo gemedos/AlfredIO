@@ -118,6 +118,7 @@ else
 fi
 check "Vigilancia de temperatura activa" systemctl is-active alfred-temp-watch.timer
 check "Vigilancia de espacio de disco activa" systemctl is-active alfred-disk-check.timer
+check "Vigilancia de la red activa" systemctl is-active alfred-net-watch.timer
 temp=$(ALFRED_STATE_DIR=$(mktemp -d) ALFRED_NOTIFY=true /usr/local/sbin/alfred-temp-watch 2>/dev/null)
 if [[ -n "$temp" ]]; then ok "Lectura actual: $temp"; else bad "No se lee la temperatura"; fi
 if [[ -z "${SHELLY_HOST:-}" ]]; then
