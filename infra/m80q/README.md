@@ -10,8 +10,9 @@ Scripts para dejar el Lenovo M80q como servidor seguro de Alfred. **Los ejecutas
 | 3 | `30-ssh-firewall.sh` | SSH sólo con clave, UFW denegar por defecto (SSH sólo por Tailscale), fail2ban | Puede dejarte fuera si lo saltas (tiene protecciones) |
 | 4 | `40-data-luks.sh /dev/…` | Cifra la partición de datos, desbloqueo por TPM, clave de recuperación | **Sí: borra esa partición** |
 | 5 | `50-docker-rootless.sh` | Docker sin root para el usuario `alfred`, datos en la partición cifrada | No |
+| 5b | `55-clips-user.sh` | Usuario `clips` con su propio Docker rootless y límites de CPU/RAM (proyecto Clipmation). Ver `docs/conflict-alfred-clipmation.md` | No |
 | 6 | `60-backup.sh` | Copias restic diarias al disco USB + prueba de restauración | No (el formateo del disco lo haces tú) |
-| 7 | `70-monitoring.sh` | Vigilancia de temperatura y consumo con avisos por Telegram | No |
+| 7 | `70-monitoring.sh` | Vigilancia de temperatura, espacio de disco y consumo con avisos por Telegram | No |
 | ✓ | `verify.sh` | Comprueba todo en un comando | No (sólo lee) |
 
 Todos se pueden repetir: si un paso falla, corriges y lo vuelves a lanzar.
@@ -67,6 +68,7 @@ sudo ./30-ssh-firewall.sh
 sudo ./40-data-luks.sh /dev/nvme0n1p3    # la partición que te indicó 00-preflight.sh
 sudo reboot                              # prueba: debe volver solo, con /srv/alfred montada
 sudo ./50-docker-rootless.sh
+sudo ./55-clips-user.sh                 # sólo si vas a alojar Clipmation (ver docs/conflict-alfred-clipmation.md)
 sudo ./60-backup.sh                      # cuando tengas el disco USB (ver abajo)
 sudo ./70-monitoring.sh
 sudo ./verify.sh
@@ -153,6 +155,6 @@ systemctl --user stop docker                     # (como alfred) parar Docker
 
 - **Probado en el repo** (`./check.sh`): shellcheck sin avisos en todos los scripts; 23 tests de la lógica de temperatura, consumo, avisos, red de Tailscale y configuración.
 - **Probado en el M80q (2026-11-23)**: pasos 0-5 y 7 y `verify.sh` (resultado OK, con los dos avisos de copias y consumo), reinicio con desbloqueo automático por TPM, entrada por Tailscale y simulación de aviso de temperatura. El paso 50 necesitó el arreglo de `.config` descrito arriba.
-- **Sin probar en el M80q**: restic y la prueba de restauración (paso 60), la vigilancia de consumo con el Shelly y `alfred-unlock-data --reenroll-tpm`.
+- **Sin probar en el M80q** (preparado y con tests/shellcheck en el repo, pero sin ejecutar allí): `55-clips-user.sh` y `alfred-disk-check`, restic y la prueba de restauración (paso 60), la vigilancia de consumo con el Shelly y `alfred-unlock-data --reenroll-tpm`.
 - **Depende de hardware que no tienes aún**: copias (caja USB para el disco de 1 TB) y vigilancia de consumo (Shelly).
 - **Estimaciones**: umbrales de temperatura (85/95 °C) y de consumo (65 W aviso, ~85 W corte).

@@ -11,6 +11,9 @@ La guía recomienda cable para un servidor 24 h. Se usa wifi mientras no hay cab
 
 **Corrección en `50-docker-rootless.sh`.** `install -d` creaba `~/.config` a nombre de root y Docker rootless no podía crear `~/.config/systemd`. Ahora se crea `~/.config` a nombre de alfred antes. Se comprobó a mano (`chown` y repetir el script) y el script corregido no se ha vuelto a ejecutar entero.
 
+**Clipmation comparte el M80q con límites** (detalle en `docs/conflict-alfred-clipmation.md`).
+Usuario `clips` con su propio Docker rootless (`55-clips-user.sh`), sin sudo ni SSH y con datos en `/srv/alfred/clips` (0700, cifrado). Los límites (8 hilos = `CPUQuota=800%`, `CPUWeight=20`, `MemoryMax=8G`, `TasksMax=4096`) se ponen en el `user-UID.slice` de systemd, no en Docker: así valen para todo lo que corra ese usuario aunque los límites de cgroup de Docker rootless no estén delegados. Es una estimación sin probar en el M80q. `alfred-disk-check` avisa por Telegram al 80 % y al 90 % de la partición de datos. Pendiente: medir una tanda real (temperatura, CPU, disco) antes de activar el runner, y el aviso de "runner caído" cuando exista el contenedor.
+
 ## 2026-11-01 — Fase 0: preparar el M80q
 
 **Sistema: Debian 13 (estable), sin escritorio, instalación limpia sobre Windows 11.**

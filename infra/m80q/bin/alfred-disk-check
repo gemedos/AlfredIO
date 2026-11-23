@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Vigila el espacio de la partición de datos (la lanza alfred-disk-check.timer cada 10 min).
+#   - Aviso por Telegram a partir de DISK_WARN_PCT (por defecto 80 %) y otro, más serio, a partir de
+#     DISK_CRIT_PCT (90 %). Repite como mucho cada 6 h, o antes si empeora.
+#   - Un aviso más al bajar 5 puntos por debajo del umbral de aviso.
+# Variables para pruebas: ALFRED_ETC, ALFRED_STATE_DIR, ALFRED_NOTIFY, ALFRED_DF, ALFRED_MOUNTPOINT.
+set -euo pipefail
+export LC_ALL=C
+
+ALFRED_ETC="${ALFRED_ETC:-/etc/alfred}"
+STATE_DIR="${ALFRED_STATE_DIR:-/var/lib/alfred}"
+NOTIFY="${ALFRED_NOTIFY:-/usr/local/sbin/alfred-notify}"
+DF="${ALFRED_DF:-df}"
+MOUNTPOINT="${ALFRED_MOUNTPOINT:-mountpoint}"
+REWARN_SECONDS=21600
+# shellcheck disable=SC1091
+. "$ALFRED_ETC/m80q.env"
+DISK_WARN_PCT="${DISK_WARN_PCT:-80}"
+DISK_CRIT_PCT="${DISK_CRIT_PCT:-90}"
+
+# Si la partición no está montada, df mediría el disco del sistema: no se mira (alfred-data-check ya avisa).
+if ! "$MOUNTPOINT" -q "$DATA_MOUNT"; then
+    echo "$DATA_MOUNT no está montada: no se vigila el espacio"
+    exit 0
+fi
+
+read -r used avail < <("$DF" --output=pcent,avail -B1G "$DATA_MOUNT" | tail -n 1 | tr -d '%G')
+[[ "$used" =~ ^[0-9]+$ && "$avail" =~ ^[0-9]+$ ]] || { echo "No se pudo leer el espacio de $DATA_MOUNT" >&2; exit 1; }
+echo "Disco de datos: ${used} % usado, ${avail} GB libres"
+
+state="$STATE_DIR/disk-state"
+PREV_LEVEL=0 LAST_WARN=0
+# shellcheck disable=SC1090
+[[ -r "$state" ]] && . "$state"
+
+level=0
+if ((used >= DISK_CRIT_PCT)); then level=2; elif ((used >= DISK_WARN_PCT)); then level=1; fi
+now=$(date +%s)
+
+save_state() { printf 'PREV_LEVEL=%s\nLAST_WARN=%s\n' "$1" "$2" >"$state"; }
+
+if ((level > 0)); then
+    if ((level > PREV_LEVEL)) || ((now - LAST_WARN >= REWARN_SECONDS)); then
+        if ((level == 2)); then
+            "$NOTIFY" "CRÍTICO: el disco de datos está al ${used} % (${avail} GB libres en $DATA_MOUNT). Libera espacio antes de que falle algo."
+        else
+            "$NOTIFY" "Aviso: el disco de datos está al ${used} % (${avail} GB libres en $DATA_MOUNT)."
+        fi
+        save_state "$level" "$now"
+    else
+        save_state "$level" "$LAST_WARN"
+    fi
+elif ((PREV_LEVEL > 0)); then
+    if ((used <= DISK_WARN_PCT - 5)); then
+        "$NOTIFY" "Disco de datos normal de nuevo: ${used} % usado (${avail} GB libres)."
+        save_state 0 0
+    fi
+fi

@@ -1,0 +1,9 @@
+[Unit]
+Description=Alfred: vigilancia del espacio de la particion de datos
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/alfred-disk-check
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes

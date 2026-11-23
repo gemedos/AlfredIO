@@ -81,6 +81,22 @@ dinfo=$(run_as_user "$ALFRED_USER" env DOCKER_HOST="unix:///run/user/$uid/docker
 check "Docker de $ALFRED_USER en modo rootless" grep -q 'rootless' <<<"$dinfo"
 check "Datos de Docker en la partición cifrada" grep -q "$DATA_MOUNT/docker" <<<"$dinfo"
 
+if id "${CLIPS_USER:-clips}" >/dev/null 2>&1; then
+    log "Clipmation (usuario ${CLIPS_USER:-clips})"
+    cu="${CLIPS_USER:-clips}"
+    cuid=$(id -u "$cu")
+    check "Linger activo para $cu" grep -qx 'Linger=yes' <<<"$(loginctl show-user "$cu" -p Linger 2>/dev/null)"
+    cinfo=$(run_as_user "$cu" env DOCKER_HOST="unix:///run/user/$cuid/docker.sock" \
+        docker info --format '{{.SecurityOptions}} {{.DockerRootDir}}' 2>/dev/null)
+    check "Docker de $cu en modo rootless" grep -q 'rootless' <<<"$cinfo"
+    check "Datos de Docker de $cu en la partición cifrada" grep -q "$DATA_MOUNT/$cu/docker" <<<"$cinfo"
+    check "Datos de $cu sólo accesibles por $cu (0700)" test "$(stat -c %a "$DATA_MOUNT/$cu" 2>/dev/null)" = 700
+    check "$cu sin sudo ni acceso a SSH" sh -c "! id -nG $cu | grep -qwE 'sudo|docker'"
+    check "Límite de CPU de $cu activo" sh -c "! systemctl show user-$cuid.slice -p CPUQuotaPerSecUSec | grep -q infinity"
+    check "Límite de RAM de $cu activo" sh -c "! systemctl show user-$cuid.slice -p MemoryMax | grep -q infinity"
+    check "Docker de alfred sigue en modo rootless y separado" grep -q 'rootless' <<<"$dinfo"
+fi
+
 log "Copias de seguridad"
 if [[ -z "${BACKUP_DISK_UUID:-}" ]]; then
     note "Copias pendientes: falta el disco USB (BACKUP_DISK_UUID vacío)"
@@ -101,6 +117,7 @@ else
     bad "Faltan TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID en $ALFRED_ETC/secrets.env"
 fi
 check "Vigilancia de temperatura activa" systemctl is-active alfred-temp-watch.timer
+check "Vigilancia de espacio de disco activa" systemctl is-active alfred-disk-check.timer
 temp=$(ALFRED_STATE_DIR=$(mktemp -d) ALFRED_NOTIFY=true /usr/local/sbin/alfred-temp-watch 2>/dev/null)
 if [[ -n "$temp" ]]; then ok "Lectura actual: $temp"; else bad "No se lee la temperatura"; fi
 if [[ -z "${SHELLY_HOST:-}" ]]; then
